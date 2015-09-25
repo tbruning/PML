@@ -1,0 +1,56 @@
+---
+title: "Practical Machine Learning"
+author: "Tom Bruning"
+date: "September 24, 2015"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Executive Summary
+
+
+
+```{r setup_training}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url = fileUrl, method = "curl", destfile = "./pml-training.csv")
+df <- read.csv("pml-training.csv", header = TRUE)
+library(doMC)
+  registerDoMC(cores = 2)
+library(caret)
+set.seed(99)
+df_new <- df[-(1:7)]
+nzvCol <- nearZeroVar(df_new)
+df_new <- df_new[,-nzvCol]
+df_new[df_new==""] <- NA
+df_train <- df_new[ , colSums(is.na(df_new)) == 0]
+inTraining <- createDataPartition(y=df_train$classe, p=0.60, list=FALSE)
+training <- df_train[ inTraining,]
+testing  <- df_train[-inTraining,]
+fileUrl_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url = fileUrl_test, method = "curl", destfile = "./pml-testing.csv")
+df_test <- read.csv("pml-testing.csv", header = TRUE) 
+answers <- predict(modelGbm, newdata=df_test)
+```
+
+## Training Function
+
+
+
+```{r train, cache=TRUE}
+fitControl <- trainControl(## 10-fold CV
+    method = "repeatedcv",
+    number = 10,
+    ## repeated three times
+    repeats = 3)
+
+modelGbm <- train(classe ~ ., method="gbm", 
+                  data=training, 
+                  trControl=fitControl, verbose = FALSE) 
+modelGbm
+
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
