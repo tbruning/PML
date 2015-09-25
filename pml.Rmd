@@ -6,36 +6,55 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,digits = 2)
 ```
 
 ## Executive Summary
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, my goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).    
 
+I chose the gbm package to fit boosted trees to the training dataset.  I used 10 fold cross validation three times to complete the model.
 
+From the plot and table in Appendix I you can see the most important variables in determining which classe a particular activity is associated with are: **roll_belt** and **pitch_for3arm**. The accuracy (.97) associated with this model attests to the merits of using this method.
 
+## The Model
+
+### Setup
 ```{r setup_training}
+# Download training dataset
+
 fileUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
-download.file(url = fileUrl, method = "curl", destfile = "./pml-training.csv")
+if(!file.exists("./pml-training.csv")) {
+download.file(url = fileUrl_test, method = "curl", destfile = "./pml-training.csv")
+}
 df <- read.csv("pml-training.csv", header = TRUE)
+
+# Load Packages
 library(doMC)
   registerDoMC(cores = 2)
 library(caret)
+require(knitr)
+require(gbm)
+require(plyr)
+  
 set.seed(99)
+
+# Clean the data getting rid of unnecessary columns,including variables that have NA's, zero values and near zero variances.  This took the total predictive variables to 52, with one predicted variable.
+
 df_new <- df[-(1:7)]
 nzvCol <- nearZeroVar(df_new)
 df_new <- df_new[,-nzvCol]
 df_new[df_new==""] <- NA
 df_train <- df_new[ , colSums(is.na(df_new)) == 0]
+
+# Partition the dataset into a training and a testing dataset
+
 inTraining <- createDataPartition(y=df_train$classe, p=0.60, list=FALSE)
 training <- df_train[ inTraining,]
 testing  <- df_train[-inTraining,]
-fileUrl_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
-download.file(url = fileUrl_test, method = "curl", destfile = "./pml-testing.csv")
-df_test <- read.csv("pml-testing.csv", header = TRUE) 
-answers <- predict(modelGbm, newdata=df_test)
+
 ```
 
-## Training Function
+### Training Function
 
 
 
@@ -53,4 +72,60 @@ modelGbm
 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r validate}
+
+# Create confusion matrices for the training and test datasets, as well as the out of sample error rate.
+gbm_confmat1 <- confusionMatrix(training$classe, predict(modelGbm, newdata=training))
+
+gbm_confmat2 <- confusionMatrix(testing$classe, predict(modelGbm, newdata=testing))
+
+oos <- round(1 - gbm_confmat1$overall[1], 2)
+```
+### Accuracy and Out of Sample Errors
+
+The accuracy of the model is shown by the accuracy of the training data   `r round(gbm_confmat1$overall[1],2) ` and the test set taken from the original partition as: `r round(gbm_confmat2$overall[1],2)`. The out of sample error for the training dataset is `r oos`   
+
+The following tables show the confusion matrix for both the training set and the testing set.
+
+```{r tables}
+
+kable(gbm_confmat1$table, format = "html", caption = "Training Data Confusion Matrix")
+kable(gbm_confmat2$table, format = "html", caption = "Testing Data Confusion Matrix")
+
+```
+
+```{r test}
+# Download and load the testing dataset for the submission.
+
+fileUrl_test <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+if(!file.exists("./pml-testing.csv")) {
+download.file(url = fileUrl_test, method = "curl", destfile = "./pml-testing.csv")
+}
+df_test <- read.csv("pml-testing.csv", header = TRUE) 
+
+```
+
+## Appendix I
+
+### Create files for submission
+
+```{r submission}
+
+# From submission instructions:
+answers <- predict(modelGbm, newdata=df_test)
+pml_write_files = function(x){
+    n = length(x)
+    for(i in 1:n){
+      filename = paste0("problem_id_",i,".txt")
+      write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+    }
+}
+pml_write_files(answers)
+```
+
+### Summary of Model
+
+```{r summary}
+summary(modelGbm)
+```
